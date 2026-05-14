@@ -32,10 +32,21 @@ K_FORMULA_TEMPLATE = "=J{n}*1.1"
 
 
 def get_client() -> gspread.Client:
-    sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT")
+    sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT", "").strip()
     if not sa_json:
-        raise EnvironmentError("GOOGLE_SERVICE_ACCOUNT 환경변수가 없습니다.")
-    sa_info = json.loads(sa_json)
+        raise EnvironmentError(
+            "GOOGLE_SERVICE_ACCOUNT 환경변수가 비어있습니다. "
+            "GitHub Secrets에서 서비스 계정 JSON을 다시 확인해주세요."
+        )
+    logger.info(f"[Sheets] 서비스 계정 JSON — 길이: {len(sa_json)}자, 시작: {sa_json[:5]!r}")
+    try:
+        sa_info = json.loads(sa_json)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"GOOGLE_SERVICE_ACCOUNT JSON 파싱 실패: {e}\n"
+            f"값의 첫 30자: {sa_json[:30]!r}\n"
+            "서비스 계정 JSON이 올바른 형식인지 확인해주세요."
+        ) from e
     creds = Credentials.from_service_account_info(sa_info, scopes=SCOPES)
     return gspread.authorize(creds)
 
