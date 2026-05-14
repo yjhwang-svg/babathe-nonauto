@@ -88,21 +88,26 @@ def login(driver):
 
     wait = WebDriverWait(driver, 20)
 
-    # JavaScript로 입력 (봇 감지 우회)
-    driver.execute_script(
-        f"document.querySelector('#id').value = '{naver_id}';"
-    )
-    driver.execute_script(
-        f"document.querySelector('#pw').value = '{naver_pw}';"
-    )
-    time.sleep(1)
+    # ID 입력 — send_keys 방식 (JS 방식은 네이버 암호화 우회 안 됨)
+    id_field = wait.until(EC.element_to_be_clickable((By.ID, "id")))
+    id_field.click()
+    id_field.clear()
+    id_field.send_keys(naver_id)
+    time.sleep(0.5)
+
+    # PW 입력
+    pw_field = wait.until(EC.element_to_be_clickable((By.ID, "pw")))
+    pw_field.click()
+    pw_field.clear()
+    pw_field.send_keys(naver_pw)
+    time.sleep(0.5)
 
     # 로그인 버튼 클릭
     try:
         login_btn = driver.find_element(By.CSS_SELECTOR, "#log\\.login, .btn_login, button[type='submit']")
         login_btn.click()
     except Exception:
-        driver.execute_script("document.querySelector('button[type=submit], #log\\.login').click()")
+        pw_field.submit()
 
     time.sleep(4)
 

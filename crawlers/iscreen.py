@@ -13,7 +13,7 @@ from utils.dates import get_target_date
 
 logger = logging.getLogger(__name__)
 
-LOGIN_URL = "https://adv.i-screen.kr/login"
+BASE_URL   = "https://adv.i-screen.kr"
 REPORT_URL = "https://adv.i-screen.kr/rpt/rpt_adv_day"
 
 
@@ -43,30 +43,63 @@ def build_driver():
     return webdriver.Chrome(options=options)
 
 
+def _dismiss_alert(driver):
+    """예기치 않은 alert이 있으면 닫는다."""
+    try:
+        alert = driver.switch_to.alert
+        logger.info(f"[iScreen] Alert 감지 및 닫음: {alert.text}")
+        alert.dismiss()
+        time.sleep(1)
+    except Exception:
+        pass
+
+
 def login(driver):
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait
 
     logger.info("[iScreen] 로그인 시작")
-    driver.get(LOGIN_URL)
+
+    # 리포트 URL로 직접 접근 → 로그인 페이지로 리다이렉트 유도
+    driver.get(REPORT_URL)
+    time.sleep(2)
+    _dismiss_alert(driver)
+
+    current_url = driver.current_url
+    logger.info(f"[iScreen] 리포트 접근 후 URL: {current_url}")
+
+    # 로그인 페이지로 이동되지 않았으면 기본 URL 시도
+    if "login" not in current_url.lower() and current_url == REPORT_URL:
+        driver.get(BASE_URL)
+        time.sleep(2)
+        _dismiss_alert(driver)
+        logger.info(f"[iScreen] 기본 URL 접근 후 URL: {driver.current_url}")
+
     wait = WebDriverWait(driver, 20)
 
-    # ID 입력 필드
-    id_input = wait.until(
-        EC.presence_of_element_located(
-            (By.CSS_SELECTOR, 'input[type="text"], input[name="id"], input[name="userId"], input[name="username"]')
+    # ID/PW 필드 탐색
+    try:
+        id_input = wait.until(
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR,
+                 'input[type="text"], input[name="id"], input[name="userId"], '
+                 'input[name="username"], input[name="memberId"]')
+            )
         )
-    )
+    except Exception:
+        driver.save_screenshot("/tmp/iscreen_before_login.png")
+        raise RuntimeError(f"[iScreen] 로그인 폼을 찾지 못했습니다. URL: {driver.current_url}")
+
+    id_input.click()
     id_input.clear()
     id_input.send_keys(_require_env("ISCREEN_ID"))
 
-    # PW 입력 필드
     pw_input = driver.find_element(By.CSS_SELECTOR, 'input[type="password"]')
+    pw_input.click()
     pw_input.clear()
     pw_input.send_keys(_require_env("ISCREEN_PW"))
 
-    # 로그인 버튼
     try:
         submit = driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]')
     except Exception:
@@ -74,6 +107,8 @@ def login(driver):
     submit.click()
 
     time.sleep(3)
+    _dismiss_alert(driver)
+
     try:
         driver.save_screenshot("/tmp/iscreen_login.png")
     except Exception:
@@ -200,6 +235,7 @@ def scrape(target_date: str | None = None) -> dict | None:
         logger.info(f"[iScreen] 리포트 페이지 이동: {REPORT_URL}")
         driver.get(REPORT_URL)
         time.sleep(2)
+        _dismiss_alert(driver)
 
         _set_date_filter(driver, target_date)
         data = _extract_data(driver)

@@ -56,33 +56,53 @@ def build_driver():
 
 def login(driver):
     from selenium.webdriver.common.by import By
+    from selenium.webdriver.common.action_chains import ActionChains
     from selenium.webdriver.support import expected_conditions as EC
     from selenium.webdriver.support.ui import WebDriverWait
 
     logger.info("[EdiAI] 로그인 시작")
     driver.get(LOGIN_URL)
     wait = WebDriverWait(driver, 20)
+    time.sleep(2)
 
-    # ID/PW 입력
-    id_input = wait.until(
-        EC.presence_of_element_located(
-            (By.CSS_SELECTOR,
-             'input[type="text"], input[type="email"], input[name="id"], '
-             'input[name="username"], input[name="email"]')
-        )
-    )
-    id_input.clear()
-    id_input.send_keys(_require_env("EDIAI_ID"))
+    try:
+        driver.save_screenshot("/tmp/ediai_before_login.png")
+    except Exception:
+        pass
 
+    # ID 입력 — 여러 셀렉터 순서대로 시도
+    id_selectors = [
+        'input[name="id"]', 'input[name="username"]', 'input[name="email"]',
+        'input[type="text"]', 'input[type="email"]',
+    ]
+    id_input = None
+    for sel in id_selectors:
+        try:
+            id_input = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, sel)))
+            logger.info(f"[EdiAI] ID 필드 찾음: {sel}")
+            break
+        except Exception:
+            continue
+
+    if id_input is None:
+        raise RuntimeError("[EdiAI] ID 입력 필드를 찾지 못했습니다.")
+
+    ActionChains(driver).move_to_element(id_input).click().send_keys(_require_env("EDIAI_ID")).perform()
+    time.sleep(0.5)
+
+    # PW 입력
     pw_input = driver.find_element(By.CSS_SELECTOR, 'input[type="password"]')
-    pw_input.clear()
-    pw_input.send_keys(_require_env("EDIAI_PW"))
+    ActionChains(driver).move_to_element(pw_input).click().send_keys(_require_env("EDIAI_PW")).perform()
+    time.sleep(0.5)
 
     # 로그인 버튼
-    submit = driver.find_element(By.CSS_SELECTOR, 'button[type="submit"], input[type="submit"]')
-    submit.click()
+    try:
+        submit = driver.find_element(By.CSS_SELECTOR, 'button[type="submit"], input[type="submit"]')
+        submit.click()
+    except Exception:
+        pw_input.submit()
 
-    time.sleep(3)
+    time.sleep(4)
     try:
         driver.save_screenshot("/tmp/ediai_login.png")
     except Exception:

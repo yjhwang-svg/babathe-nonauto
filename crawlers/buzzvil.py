@@ -61,18 +61,40 @@ def login(driver):
 
     driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
 
+    # 로그인 처리까지 넉넉하게 대기
+    time.sleep(6)
     try:
         wait.until(EC.url_changes(LOGIN_URL))
     except Exception:
         pass
+    time.sleep(2)
 
     try:
         driver.save_screenshot("/tmp/buzzvil_login.png")
     except Exception:
         pass
 
-    if LOGIN_URL in driver.current_url:
-        raise RuntimeError("[Buzzvil] 로그인 실패 — 현재 URL이 로그인 페이지")
+    current_url = driver.current_url
+    logger.info(f"[Buzzvil] 로그인 후 URL: {current_url}")
+
+    # 에러 메시지 로그
+    if "login" in current_url.lower():
+        try:
+            err_el = driver.find_element(
+                By.CSS_SELECTOR, ".error-message, .alert, [class*='error'], [class*='Error']"
+            )
+            logger.error(f"[Buzzvil] 페이지 에러 메시지: {err_el.text}")
+        except Exception:
+            pass
+        raise RuntimeError(f"[Buzzvil] 로그인 실패 — URL: {current_url}")
+
+    # 대시보드 요소가 나타날 때까지 추가 대기
+    try:
+        wait.until(EC.presence_of_element_located(
+            (By.CSS_SELECTOR, "nav, .sidebar, [class*='dashboard'], [class*='nav']")
+        ))
+    except Exception:
+        logger.warning("[Buzzvil] 대시보드 요소 미확인 — 계속 진행")
 
     logger.info("[Buzzvil] 로그인 성공")
     time.sleep(2)
