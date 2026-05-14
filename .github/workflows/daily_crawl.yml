@@ -19,10 +19,6 @@ on:
         description: "기간 종료 날짜 (YYYY-MM-DD)"
         required: false
         default: ""
-      allow_partial_upload:
-        description: "일부 매체 실패 시에도 Sheets 업로드 진행 (1이면 허용)"
-        required: false
-        default: "0"
 
 jobs:
   crawl:
@@ -55,7 +51,7 @@ jobs:
           TARGET_DATE:            ${{ github.event.inputs.target_date }}
           DATE_FROM:              ${{ github.event.inputs.date_from }}
           DATE_TO:                ${{ github.event.inputs.date_to }}
-          ALLOW_PARTIAL_UPLOAD:   ${{ github.event.inputs.allow_partial_upload || '0' }}
+          ALLOW_PARTIAL_UPLOAD:   "1"
           # 버즈빌
           BUZZVIL_EMAIL:          ${{ secrets.BUZZVIL_EMAIL }}
           BUZZVIL_PASSWORD:       ${{ secrets.BUZZVIL_PASSWORD }}
