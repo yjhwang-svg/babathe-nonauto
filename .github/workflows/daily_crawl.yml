@@ -47,11 +47,8 @@ jobs:
       - name: Chrome 설치
         uses: browser-actions/setup-chrome@v1
 
-      - name: ChromeDriver 설치
-        uses: nanasess/setup-chromedriver@v2
-
       - name: Chrome 버전 확인
-        run: google-chrome --version && chromedriver --version
+        run: google-chrome --version
 
       - name: 크롤링 및 Sheets 업로드 실행
         env:
@@ -102,6 +99,10 @@ jobs:
           RERUN_PART=""
           if [ -n "$GAS_RERUN_URL" ]; then
             RERUN_PART="\n<${GAS_RERUN_URL}|재실행>"
+          fi
+          if [ -z "$SLACK_WEBHOOK_URL" ]; then
+            echo "SLACK_WEBHOOK_URL 미설정 — 알림 건너뜀"
+            exit 0
           fi
           curl -s -X POST "$SLACK_WEBHOOK_URL" \
             -H 'Content-Type: application/json' \
