@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>바바더닷컴 수기매체 재실행</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f2f5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      padding: 40px 36px;
+      width: 100%;
+      max-width: 460px;
+    }
+
+    .icon { font-size: 40px; margin-bottom: 12px; }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1a1a1a;
+      margin-bottom: 6px;
+    }
+
+    .desc {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 28px;
+      line-height: 1.5;
+    }
+
+    /* 탭 */
+    .tabs {
+      display: flex;
+      border-bottom: 2px solid #e8e8e8;
+      margin-bottom: 24px;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 10px 0;
+      text-align: center;
+      font-size: 14px;
+      font-weight: 600;
+      color: #999;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s;
+    }
+
+    .tab.active {
+      color: #4f7cff;
+      border-bottom-color: #4f7cff;
+    }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #444;
+      margin-bottom: 6px;
+    }
+
+    input[type="date"] {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 10px;
+      font-size: 15px;
+      color: #1a1a1a;
+      outline: none;
+      transition: border-color 0.2s;
+      margin-bottom: 16px;
+    }
+
+    input[type="date"]:focus { border-color: #4f7cff; }
+
+    .row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .row > div { flex: 1; }
+
+    button {
+      width: 100%;
+      padding: 13px;
+      background: #4f7cff;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+      margin-top: 4px;
+    }
+
+    button:hover { background: #3a66e8; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .result {
+      margin-top: 18px;
+      padding: 14px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-line;
+      display: none;
+    }
+
+    .result.success { background: #eaf4eb; color: #2d7a3a; }
+    .result.error   { background: #fdecea; color: #b71c1c; }
+
+    .spinner {
+      display: inline-block;
+      width: 15px; height: 15px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">📊</div>
+    <h1>바바더닷컴 수기매체 재실행</h1>
+    <p class="desc">날짜를 선택하고 실행하면 해당 날짜 데이터를<br>다시 수집해 버티컬_raw 탭에 업로드합니다.</p>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('single')">단일 날짜</div>
+      <div class="tab" onclick="switchTab('range')">기간 재처리</div>
+    </div>
+
+    <!-- 단일 날짜 탭 -->
+    <div id="panel-single" class="panel active">
+      <label for="single-date">재처리 날짜</label>
+      <input type="date" id="single-date" />
+      <button id="btn-single" onclick="runSingle()">실행</button>
+    </div>
+
+    <!-- 기간 탭 -->
+    <div id="panel-range" class="panel">
+      <div class="row">
+        <div>
+          <label for="from-date">시작 날짜</label>
+          <input type="date" id="from-date" />
+        </div>
+        <div>
+          <label for="to-date">종료 날짜</label>
+          <input type="date" id="to-date" />
+        </div>
+      </div>
+      <button id="btn-range" onclick="runRange()">기간 실행</button>
+    </div>
+
+    <div class="result" id="result"></div>
+  </div>
+
+  <script>
+    // 기본값: 어제 날짜
+    (function () {
+      var d = new Date();
+      d.setDate(d.getDate() - 1);
+      var str = d.toISOString().split("T")[0];
+      document.getElementById("single-date").value = str;
+      document.getElementById("single-date").max   = str;
+      document.getElementById("from-date").value   = str;
+      document.getElementById("from-date").max     = str;
+      document.getElementById("to-date").value     = str;
+      document.getElementById("to-date").max       = str;
+    })();
+
+    function switchTab(tab) {
+      document.querySelectorAll(".tab").forEach(function(el, i) {
+        el.classList.toggle("active", (i === 0 && tab === "single") || (i === 1 && tab === "range"));
+      });
+      document.getElementById("panel-single").classList.toggle("active", tab === "single");
+      document.getElementById("panel-range").classList.toggle("active",  tab === "range");
+      document.getElementById("result").style.display = "none";
+    }
+
+    function _setLoading(btnId, loading) {
+      var btn = document.getElementById(btnId);
+      btn.disabled  = loading;
+      btn.innerHTML = loading ? '<span class="spinner"></span>실행 중...' : (btnId === "btn-range" ? "기간 실행" : "실행");
+    }
+
+    function _showResult(res) {
+      var el = document.getElementById("result");
+      el.className   = "result " + (res.success ? "success" : "error");
+      el.textContent = (res.success ? "✅ " : "❌ ") + res.message;
+      el.style.display = "block";
+    }
+
+    function runSingle() {
+      var dateVal = document.getElementById("single-date").value;
+      if (!dateVal) { alert("날짜를 선택해주세요."); return; }
+      _setLoading("btn-single", true);
+      document.getElementById("result").style.display = "none";
+
+      google.script.run
+        .withSuccessHandler(function(res) { _setLoading("btn-single", false); _showResult(res); })
+        .withFailureHandler(function(err) { _setLoading("btn-single", false); _showResult({ success: false, message: err.message }); })
+        .triggerWorkflow(dateVal);
+    }
+
+    function runRange() {
+      var from = document.getElementById("from-date").value;
+      var to   = document.getElementById("to-date").value;
+      if (!from || !to) { alert("시작 날짜와 종료 날짜를 모두 선택해주세요."); return; }
+      if (from > to)    { alert("시작 날짜가 종료 날짜보다 늦을 수 없습니다."); return; }
+      _setLoading("btn-range", true);
+      document.getElementById("result").style.display = "none";
+
+      google.script.run
+        .withSuccessHandler(function(res) { _setLoading("btn-range", false); _showResult(res); })
+        .withFailureHandler(function(err) { _setLoading("btn-range", false); _showResult({ success: false, message: err.message }); })
+        .triggerWorkflowRange(from, to);
+    }
+  </script>
+</body>
+</html>
