@@ -102,100 +102,112 @@ def login(driver):
 
 
 def _set_yesterday(driver):
-    """상단 '어제' 버튼 클릭."""
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.support.ui import WebDriverWait
-
-    wait = WebDriverWait(driver, 10)
-    try:
-        btn = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//button[normalize-space()='어제'] | //*[normalize-space()='어제' and (self::button or self::span or self::a)]")
-        ))
-        btn.click()
+    """상단 '어제' 버튼 클릭 — JS로 텍스트 탐색."""
+    clicked = driver.execute_script("""
+        var all = document.querySelectorAll('button, span, div, a, li');
+        for (var i = 0; i < all.length; i++) {
+            var t = (all[i].innerText || '').trim();
+            if (t === '어제' && all[i].children.length === 0) {
+                all[i].click();
+                return true;
+            }
+        }
+        return false;
+    """)
+    if clicked:
         logger.info("[EdiAI] '어제' 버튼 클릭")
         time.sleep(1)
-    except Exception as e:
-        logger.warning(f"[EdiAI] '어제' 버튼 클릭 실패: {e}")
+    else:
+        logger.warning("[EdiAI] '어제' 버튼 없음 — 기본 날짜 유지")
 
 
 def _select_advertiser(driver):
-    """광고주 드롭다운에서 바바더닷컴 선택."""
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.support.ui import WebDriverWait
-
-    wait = WebDriverWait(driver, 10)
+    """광고주 드롭다운에서 바바더닷컴 선택 — JS로 처리."""
     time.sleep(1)
-
-    try:
-        # 광고주 드롭다운 트리거 클릭 (현재 선택값 표시 영역)
-        trigger = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, f"//*[contains(text(),'{ADVERTISER_NAME}') and (self::div or self::span or self::button or self::input)]")
-        ))
-        trigger.click()
+    # 드롭다운 트리거 클릭 (광고주 선택 placeholder 또는 현재 선택값)
+    driver.execute_script("""
+        var all = document.querySelectorAll('*');
+        for (var i = 0; i < all.length; i++) {
+            var t = (all[i].innerText || '').trim();
+            if ((t === '광고주 선택' || t.indexOf('바바더닷컴') >= 0) && all[i].children.length <= 2) {
+                all[i].click();
+                return;
+            }
+        }
+    """)
+    time.sleep(1)
+    # 옵션 선택
+    clicked = driver.execute_script("""
+        var name = arguments[0];
+        var all = document.querySelectorAll('li, div, span, option');
+        for (var i = 0; i < all.length; i++) {
+            var t = (all[i].innerText || '').trim();
+            if (t.indexOf(name) >= 0 && all[i].children.length === 0) {
+                all[i].click();
+                return t;
+            }
+        }
+        return null;
+    """, ADVERTISER_NAME)
+    if clicked:
+        logger.info(f"[EdiAI] 광고주 선택: {clicked}")
         time.sleep(1)
-
-        # 드롭다운 목록에서 바바더닷컴(바바더닷컴) 선택
-        options = driver.find_elements(
-            By.XPATH, f"//*[contains(text(),'{ADVERTISER_NAME}') and (self::li or self::div or self::option or self::span)]"
-        )
-        for opt in options:
-            if ADVERTISER_NAME in opt.text and opt.is_displayed():
-                opt.click()
-                logger.info(f"[EdiAI] 광고주 선택: {opt.text.strip()}")
-                time.sleep(1)
-                return
-    except Exception as e:
-        logger.warning(f"[EdiAI] 광고주 선택 실패 (이미 선택됐을 수 있음): {e}")
+    else:
+        logger.warning("[EdiAI] 광고주 선택 실패 (이미 선택됐을 수 있음)")
 
 
 def _select_campaign(driver, campaign_keyword: str):
-    """캠페인 드롭다운에서 keyword 포함하는 캠페인 선택."""
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.support.ui import WebDriverWait
-
-    wait = WebDriverWait(driver, 10)
+    """캠페인 드롭다운에서 keyword 포함하는 캠페인 선택 — JS로 처리."""
     time.sleep(1)
-
-    try:
-        # 두 번째 드롭다운 열기 (캠페인명 표시 영역 클릭)
-        trigger = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, f"//*[contains(text(),'{campaign_keyword}') and (self::div or self::span or self::button or self::input)]")
-        ))
-        trigger.click()
+    # 드롭다운 트리거 클릭 (placeholder 또는 현재 선택된 캠페인명)
+    driver.execute_script("""
+        var all = document.querySelectorAll('*');
+        for (var i = 0; i < all.length; i++) {
+            var t = (all[i].innerText || '').trim();
+            if ((t === '캠페인 선택' || t === 'AI상품매칭' || t === '트렌드박스') && all[i].children.length <= 2) {
+                all[i].click();
+                return;
+            }
+        }
+    """)
+    time.sleep(1)
+    # 키워드 포함 옵션 클릭
+    clicked = driver.execute_script("""
+        var kw = arguments[0];
+        var all = document.querySelectorAll('li, div, span, option');
+        for (var i = 0; i < all.length; i++) {
+            var t = (all[i].innerText || '').trim();
+            if (t.indexOf(kw) >= 0 && all[i].children.length === 0) {
+                all[i].click();
+                return t;
+            }
+        }
+        return null;
+    """, campaign_keyword)
+    if clicked:
+        logger.info(f"[EdiAI] 캠페인 선택: {clicked}")
         time.sleep(1)
-
-        options = driver.find_elements(
-            By.XPATH, f"//*[contains(text(),'{campaign_keyword}') and (self::li or self::div or self::option or self::span)]"
-        )
-        for opt in options:
-            if campaign_keyword in opt.text and opt.is_displayed():
-                opt.click()
-                logger.info(f"[EdiAI] 캠페인 선택: {opt.text.strip()}")
-                time.sleep(1)
-                return
+    else:
         logger.warning(f"[EdiAI] 캠페인 '{campaign_keyword}' 선택 실패 — 기본값 유지")
-    except Exception as e:
-        logger.warning(f"[EdiAI] 캠페인 드롭다운 조작 실패: {e}")
 
 
 def _click_search(driver):
-    """'조회' 버튼 클릭."""
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support import expected_conditions as EC
-    from selenium.webdriver.support.ui import WebDriverWait
-
-    wait = WebDriverWait(driver, 10)
-    try:
-        btn = wait.until(EC.element_to_be_clickable(
-            (By.XPATH, "//button[normalize-space()='조회']")
-        ))
-        btn.click()
+    """'조회' 버튼 클릭 — JS로 처리."""
+    clicked = driver.execute_script("""
+        var all = document.querySelectorAll('button, div, span, a');
+        for (var i = 0; i < all.length; i++) {
+            var t = (all[i].innerText || '').trim();
+            if (t === '조회' && all[i].children.length === 0) {
+                all[i].click();
+                return true;
+            }
+        }
+        return false;
+    """)
+    if clicked:
         logger.info("[EdiAI] 조회 버튼 클릭")
-    except Exception as e:
-        logger.warning(f"[EdiAI] 조회 버튼 클릭 실패: {e}")
+    else:
+        logger.warning("[EdiAI] 조회 버튼 없음")
     time.sleep(5)
 
 
