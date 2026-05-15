@@ -26,13 +26,6 @@ CAMPAIGNS = {
     "trendbox":    "트렌드박스",
 }
 
-# 합계 행 셀 구조: [''(빈칸), '합계', 노출수, 클릭수, 클릭률, 전환수, 전환율, 광고비, 전환금액, ROAS, ...]
-COL_IMPS     = 2
-COL_CLICKS   = 3
-COL_PURCHASE = 5
-COL_COST     = 7
-COL_REVENUE  = 8
-
 
 def _require_env(name: str) -> str:
     val = os.environ.get(name, "").strip()
@@ -169,7 +162,8 @@ def _select_campaign(driver, campaign_keyword: str):
         wrap.click()
         time.sleep(1)
 
-        # JS: 화면에 보이는 label[for^="ckb_"]만 순회 — 조상 탐색으로 p 텍스트 매칭
+        # JS: 화면에 보이는 label[for^="ckb_"]만 순회
+        # textContent로 부모 행 전체 텍스트에서 키워드 매칭 (innerText는 headless에서 불안정)
         actions = driver.execute_script("""
             var kw = arguments[0];
             var done = [];
@@ -182,14 +176,16 @@ def _select_campaign(driver, campaign_keyword: str):
                 if (lr.width === 0 && lr.height === 0) continue;
                 var chk = document.getElementById(forId);
                 if (!chk) continue;
-                // label의 부모를 거슬러 올라가며 p 요소 탐색
-                var p = null;
-                var node = labels[i].parentElement;
-                for (var depth = 0; depth < 5 && node && !p; depth++) {
-                    p = node.querySelector('p');
+                // 부모 행의 textContent에서 키워드 탐색 (최대 4단계)
+                var text = '';
+                var node = labels[i];
+                for (var d = 0; d < 4; d++) {
                     node = node.parentElement;
+                    if (!node) break;
+                    var tc = (node.textContent || '').replace(/\\s+/g, ' ').trim();
+                    if (tc.length > 2 && tc.length < 300) { text = tc; }
+                    if (text.indexOf(kw) >= 0) break;
                 }
-                var text = p ? (p.innerText || '') : '';
                 var isTarget = text.indexOf(kw) >= 0;
                 // XOR: 상태 불일치할 때만 클릭
                 if (isTarget !== chk.checked) {
@@ -292,17 +288,23 @@ def _extract_data(driver, label: str) -> dict | None:
 
     logger.info(f"[EdiAI/{label}] 셀 수: {len(cells)}, 내용: {cells}")
 
-    def _get(idx):
-        if idx < len(cells):
-            return _clean_number(cells[idx])
-        return 0
+    # '합계' 셀 위치를 동적으로 탐지 — 셀 구조가 달라져도 안전
+    try:
+        base = next(i for i, c in enumerate(cells) if c.strip() == "합계")
+    except StopIteration:
+        base = -1  # '합계' 없으면 0-indexed 직접 사용
+
+    # 합계 이후: 노출(+1), 클릭(+2), 클릭률(+3), 전환수(+4), 전환율(+5), 광고비(+6), 전환금액(+7)
+    def _get(offset):
+        idx = base + offset if base >= 0 else offset
+        return _clean_number(cells[idx]) if 0 <= idx < len(cells) else 0
 
     result = {
-        "imps":     _get(COL_IMPS),
-        "clicks":   _get(COL_CLICKS),
-        "cost":     _get(COL_COST),
-        "purchase": _get(COL_PURCHASE),
-        "revenue":  _get(COL_REVENUE),
+        "imps":     _get(1),
+        "clicks":   _get(2),
+        "cost":     _get(6),
+        "purchase": _get(4),
+        "revenue":  _get(7),
     }
     logger.info(f"[EdiAI/{label}] 결과: {result}")
     return result
