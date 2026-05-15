@@ -16,7 +16,7 @@ from utils.dates import get_target_date
 
 logger = logging.getLogger(__name__)
 
-LOGIN_URL = "https://dashboard.buzzvil.com/login"
+LOGIN_URL = "https://dashboard.buzzvil.com/"
 REPORT_URL_TEMPLATE = "https://dashboard.buzzvil.com/campaign/direct_sales/adgroups/{adgroup_id}/report"
 
 
@@ -65,31 +65,23 @@ def login(driver):
     driver.get(LOGIN_URL)
     wait = WebDriverWait(driver, 20)
 
-    # 실제 확인된 선택자: id="signin__username-input", id="signin__pw-input", id="signin__signin-btn"
     email_input = wait.until(
-        EC.presence_of_element_located(
-            (By.CSS_SELECTOR, '#signin__username-input, input[type="email"]')
-        )
+        EC.presence_of_element_located((By.CSS_SELECTOR, 'input[type="email"]'))
     )
     email_input.clear()
     email_input.send_keys(_require_env("BUZZVIL_EMAIL"))
 
-    pw = driver.find_element(By.CSS_SELECTOR, '#signin__pw-input, input[type="password"]')
+    pw = driver.find_element(By.CSS_SELECTOR, 'input[type="password"]')
     pw.clear()
     pw.send_keys(_require_env("BUZZVIL_PASSWORD"))
 
-    # Sign in 버튼 클릭
-    try:
-        btn = driver.find_element(By.ID, "signin__signin-btn")
-        driver.execute_script("arguments[0].click();", btn)
-    except Exception:
-        from selenium.webdriver.common.keys import Keys
-        pw.send_keys(Keys.RETURN)
+    btn = driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]')
+    driver.execute_script("arguments[0].click();", btn)
 
-    # 로그인 처리까지 넉넉하게 대기
+    # 로그인 후 URL이 루트(/)에서 다른 경로로 이동할 때까지 대기
     time.sleep(8)
     try:
-        wait.until(EC.url_changes(LOGIN_URL))
+        wait.until(lambda d: d.current_url != LOGIN_URL)
     except Exception:
         pass
     time.sleep(3)
@@ -102,8 +94,8 @@ def login(driver):
     current_url = driver.current_url
     logger.info(f"[Buzzvil] 로그인 후 URL: {current_url}")
 
-    # 로그인 성공 여부: URL 변경 OR 대시보드 특징 요소 존재
-    logged_in = "login" not in current_url.lower()
+    # 로그인 성공 여부: URL이 루트(/)에서 벗어났으면 성공
+    logged_in = current_url.rstrip("/") != LOGIN_URL.rstrip("/")
     if not logged_in:
         # SPA일 경우 URL이 안 바뀔 수 있어 DOM으로 교차 확인
         try:

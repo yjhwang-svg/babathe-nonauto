@@ -26,12 +26,12 @@ CAMPAIGNS = {
     "trendbox":    "트렌드박스",
 }
 
-# 실제 확인된 컬럼 순서 (날짜|노출 수|클릭 수|클릭률|전환 수|전환율|광고비|전환 금액|ROAS|...)
-COL_IMPS     = 1
-COL_CLICKS   = 2
-COL_PURCHASE = 4
-COL_COST     = 6
-COL_REVENUE  = 7
+# 합계 행 셀 구조: [''(빈칸), '합계', 노출수, 클릭수, 클릭률, 전환수, 전환율, 광고비, 전환금액, ROAS, ...]
+COL_IMPS     = 2
+COL_CLICKS   = 3
+COL_PURCHASE = 5
+COL_COST     = 7
+COL_REVENUE  = 8
 
 
 def _require_env(name: str) -> str:
