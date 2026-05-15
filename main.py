@@ -51,6 +51,11 @@ def run(target_date: str | None = None) -> dict:
     bv_ids_raw = dynamic_cfg.get("buzzvil_adgroup_ids", "55775,55776")
     buzzvil_adgroup_ids = [x.strip() for x in bv_ids_raw.split(",") if x.strip()]
 
+    # SKIP_CRAWLERS=naver_shopping,ediai 형태로 건너뛸 크롤러 지정
+    skip = {s.strip() for s in os.environ.get("SKIP_CRAWLERS", "").split(",") if s.strip()}
+    if skip:
+        logger.info(f"건너뛸 크롤러: {skip}")
+
     errors = []
     rows_data = []  # 최종 업로드 행 목록
 
@@ -95,55 +100,67 @@ def run(target_date: str | None = None) -> dict:
                            "imps": 0, "clicks": 0, "cost": 0})
 
     # ── 네이버쇼핑 PC / MO ───────────────────────────────────
-    logger.info("--- 네이버쇼핑 크롤링 시작 ---")
-    try:
-        nv_data = naver_shopping.scrape(target_date=target_date)
-
-        for label, campaign, device in [("pc", "네이버쇼핑_PC", "PC"), ("mo", "네이버쇼핑_M", "M")]:
-            d = nv_data.get(label)
-            if d:
-                rows_data.append({
-                    "media": "네이버쇼핑", "campaign": campaign, "device": device,
-                    "imps": d["imps"], "clicks": d["clicks"], "cost": d["cost"],
-                })
-                logger.info(f"[네이버쇼핑/{label.upper()}] 완료: {d}")
-            else:
-                errors.append(f"네이버쇼핑_{label.upper()} 데이터 없음")
-                rows_data.append({"media": "네이버쇼핑", "campaign": campaign, "device": device,
-                                   "imps": 0, "clicks": 0, "cost": 0})
-    except Exception as e:
-        logger.error(f"네이버쇼핑 크롤링 실패: {e}")
-        errors.append(f"네이버쇼핑 오류: {e}")
+    if "naver_shopping" in skip:
+        logger.info("--- 네이버쇼핑 건너뜀 (SKIP_CRAWLERS) ---")
         rows_data.append({"media": "네이버쇼핑", "campaign": "네이버쇼핑_PC", "device": "PC",
                            "imps": 0, "clicks": 0, "cost": 0})
         rows_data.append({"media": "네이버쇼핑", "campaign": "네이버쇼핑_M", "device": "M",
                            "imps": 0, "clicks": 0, "cost": 0})
+    else:
+        logger.info("--- 네이버쇼핑 크롤링 시작 ---")
+        try:
+            nv_data = naver_shopping.scrape(target_date=target_date)
+            for label, campaign, device in [("pc", "네이버쇼핑_PC", "PC"), ("mo", "네이버쇼핑_M", "M")]:
+                d = nv_data.get(label)
+                if d:
+                    rows_data.append({
+                        "media": "네이버쇼핑", "campaign": campaign, "device": device,
+                        "imps": d["imps"], "clicks": d["clicks"], "cost": d["cost"],
+                    })
+                    logger.info(f"[네이버쇼핑/{label.upper()}] 완료: {d}")
+                else:
+                    errors.append(f"네이버쇼핑_{label.upper()} 데이터 없음")
+                    rows_data.append({"media": "네이버쇼핑", "campaign": campaign, "device": device,
+                                       "imps": 0, "clicks": 0, "cost": 0})
+        except Exception as e:
+            logger.error(f"네이버쇼핑 크롤링 실패: {e}")
+            errors.append(f"네이버쇼핑 오류: {e}")
+            rows_data.append({"media": "네이버쇼핑", "campaign": "네이버쇼핑_PC", "device": "PC",
+                               "imps": 0, "clicks": 0, "cost": 0})
+            rows_data.append({"media": "네이버쇼핑", "campaign": "네이버쇼핑_M", "device": "M",
+                               "imps": 0, "clicks": 0, "cost": 0})
 
     # ── 에디AI ───────────────────────────────────────────────
-    logger.info("--- 에디AI 크롤링 시작 ---")
-    try:
-        edi_data = ediai.scrape(target_date=target_date)
-
-        for key, campaign in [("ai_matching", "AI상품매칭"), ("trendbox", "트렌드박스")]:
-            d = edi_data.get(key)
-            if d:
-                rows_data.append({
-                    "media": "에디AI", "campaign": campaign, "device": "M",
-                    "imps": d["imps"], "clicks": d["clicks"], "cost": d["cost"],
-                    "purchase": d.get("purchase", 0), "revenue": d.get("revenue", 0),
-                })
-                logger.info(f"[에디AI/{campaign}] 완료: {d}")
-            else:
-                errors.append(f"에디AI {campaign} 데이터 없음")
-                rows_data.append({"media": "에디AI", "campaign": campaign, "device": "M",
-                                   "imps": 0, "clicks": 0, "cost": 0})
-    except Exception as e:
-        logger.error(f"에디AI 크롤링 실패: {e}")
-        errors.append(f"에디AI 오류: {e}")
+    if "ediai" in skip:
+        logger.info("--- 에디AI 건너뜀 (SKIP_CRAWLERS) ---")
         rows_data.append({"media": "에디AI", "campaign": "AI상품매칭", "device": "M",
                            "imps": 0, "clicks": 0, "cost": 0})
         rows_data.append({"media": "에디AI", "campaign": "트렌드박스", "device": "M",
                            "imps": 0, "clicks": 0, "cost": 0})
+    else:
+        logger.info("--- 에디AI 크롤링 시작 ---")
+        try:
+            edi_data = ediai.scrape(target_date=target_date)
+            for key, campaign in [("ai_matching", "AI상품매칭"), ("trendbox", "트렌드박스")]:
+                d = edi_data.get(key)
+                if d:
+                    rows_data.append({
+                        "media": "에디AI", "campaign": campaign, "device": "M",
+                        "imps": d["imps"], "clicks": d["clicks"], "cost": d["cost"],
+                        "purchase": d.get("purchase", 0), "revenue": d.get("revenue", 0),
+                    })
+                    logger.info(f"[에디AI/{campaign}] 완료: {d}")
+                else:
+                    errors.append(f"에디AI {campaign} 데이터 없음")
+                    rows_data.append({"media": "에디AI", "campaign": campaign, "device": "M",
+                                       "imps": 0, "clicks": 0, "cost": 0})
+        except Exception as e:
+            logger.error(f"에디AI 크롤링 실패: {e}")
+            errors.append(f"에디AI 오류: {e}")
+            rows_data.append({"media": "에디AI", "campaign": "AI상품매칭", "device": "M",
+                               "imps": 0, "clicks": 0, "cost": 0})
+            rows_data.append({"media": "에디AI", "campaign": "트렌드박스", "device": "M",
+                               "imps": 0, "clicks": 0, "cost": 0})
 
     # ── Google Sheets 업로드 ─────────────────────────────────
     allow_partial = os.environ.get("ALLOW_PARTIAL_UPLOAD", "0") == "1"
