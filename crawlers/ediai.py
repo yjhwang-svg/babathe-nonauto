@@ -125,85 +125,80 @@ def _set_yesterday(driver):
 
 
 def _select_advertiser(driver):
-    """광고주 드롭다운에서 바바더닷컴 선택 — 가시성 확인 후 클릭."""
+    """광고주 드롭다운 (React-Select, .report_SelectAuid) — Selenium으로 직접 조작."""
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
+
     time.sleep(1)
-    # 드롭다운 트리거 클릭 (화면에 보이는 요소만)
-    driver.execute_script("""
-        var tags = ['button', 'span', 'div', 'li', 'a'];
-        for (var ti = 0; ti < tags.length; ti++) {
-            var els = document.querySelectorAll(tags[ti]);
-            for (var i = 0; i < els.length; i++) {
-                var t = (els[i].innerText || '').trim();
-                var r = els[i].getBoundingClientRect();
-                if ((t === '광고주 선택' || t === '바바더닷컴') && r.width > 0 && r.height > 0) {
-                    els[i].click(); return t;
-                }
-            }
-        }
-    """)
-    time.sleep(1)
-    # 옵션 클릭 — 드롭다운 열린 후 화면에 보이는 옵션만
-    clicked = driver.execute_script("""
-        var name = arguments[0];
-        var tags = ['option', 'li', 'span', 'div'];
-        for (var ti = 0; ti < tags.length; ti++) {
-            var els = document.querySelectorAll(tags[ti]);
-            for (var i = 0; i < els.length; i++) {
-                var t = (els[i].innerText || '').trim();
-                var r = els[i].getBoundingClientRect();
-                if (t.indexOf(name) >= 0 && t.length < 30 && r.width > 0 && r.height > 0) {
-                    els[i].click(); return t;
-                }
-            }
-        }
-        return null;
-    """, ADVERTISER_NAME)
-    if clicked:
-        logger.info(f"[EdiAI] 광고주 선택: {clicked}")
+    wait = WebDriverWait(driver, 10)
+    try:
+        # React-Select control 클릭으로 드롭다운 열기
+        control = wait.until(EC.element_to_be_clickable(
+            (By.CSS_SELECTOR, '.report_SelectAuid [class*="-control"]')
+        ))
+        control.click()
         time.sleep(1)
-    else:
-        logger.warning("[EdiAI] 광고주 선택 실패 (이미 선택됐을 수 있음)")
+        # 열린 메뉴에서 ADVERTISER_NAME 포함 옵션 클릭
+        options = driver.find_elements(By.CSS_SELECTOR, '[class*="-option"]')
+        for opt in options:
+            if ADVERTISER_NAME in (opt.text or ""):
+                opt.click()
+                logger.info("[EdiAI] 광고주 선택 완료")
+                time.sleep(1)
+                return
+        logger.warning("[EdiAI] 광고주 옵션 없음 — 기본값 유지")
+    except Exception as e:
+        logger.warning(f"[EdiAI] 광고주 선택 오류: {e}")
 
 
 def _select_campaign(driver, campaign_keyword: str):
-    """캠페인 드롭다운에서 keyword 포함하는 캠페인 선택 — 가시성 확인 후 클릭."""
+    """
+    캠페인 드롭다운 (#selectBoxWrap 체크박스 멀티셀렉트).
+    keyword 포함 캠페인만 체크, 나머지 해제.
+    """
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
+
     time.sleep(1)
-    # 드롭다운 트리거 클릭 (화면에 보이는 요소만)
-    driver.execute_script("""
-        var tags = ['button', 'span', 'div', 'li', 'a'];
-        for (var ti = 0; ti < tags.length; ti++) {
-            var els = document.querySelectorAll(tags[ti]);
-            for (var i = 0; i < els.length; i++) {
-                var t = (els[i].innerText || '').trim();
-                var r = els[i].getBoundingClientRect();
-                if ((t === '캠페인 선택' || t === 'AI상품매칭' || t === '트렌드박스') && r.width > 0 && r.height > 0) {
-                    els[i].click(); return t;
-                }
-            }
-        }
-    """)
-    time.sleep(1.5)  # 드롭다운 애니메이션 대기
-    # 옵션 클릭 — 드롭다운 열린 후 화면에 보이는 옵션만
-    clicked = driver.execute_script("""
-        var kw = arguments[0];
-        var tags = ['option', 'li', 'span', 'div'];
-        for (var ti = 0; ti < tags.length; ti++) {
-            var els = document.querySelectorAll(tags[ti]);
-            for (var i = 0; i < els.length; i++) {
-                var t = (els[i].innerText || '').trim();
-                var r = els[i].getBoundingClientRect();
-                if (t.indexOf(kw) >= 0 && t.length < 30 && r.width > 0 && r.height > 0) {
-                    els[i].click(); return t;
-                }
-            }
-        }
-        return null;
-    """, campaign_keyword)
-    if clicked:
-        logger.info(f"[EdiAI] 캠페인 선택: {clicked}")
+    wait = WebDriverWait(driver, 10)
+    try:
+        # 드롭다운 열기
+        wrap = wait.until(EC.element_to_be_clickable((By.ID, "selectBoxWrap")))
+        wrap.click()
         time.sleep(1)
-    else:
-        logger.warning(f"[EdiAI] 캠페인 '{campaign_keyword}' 선택 실패 — 기본값 유지")
+
+        # JS: label[for^="ckb_"] 순회 — 텍스트 매칭으로 target/non-target 구분 후 토글
+        actions = driver.execute_script("""
+            var kw = arguments[0];
+            var done = [];
+            var labels = document.querySelectorAll('label[for^="ckb_"]');
+            for (var i = 0; i < labels.length; i++) {
+                var forId = labels[i].getAttribute('for');
+                if (forId === 'ckb_all') continue;
+                var chk = document.getElementById(forId);
+                if (!chk) continue;
+                var row = labels[i].parentElement;
+                var p = row ? row.querySelector('p') : null;
+                var text = p ? (p.innerText || '') : '';
+                var isTarget = text.indexOf(kw) >= 0;
+                // XOR: click only if state needs to change
+                if (isTarget !== chk.checked) {
+                    labels[i].click();
+                    done.push(forId + ':' + (isTarget ? 'on' : 'off'));
+                }
+            }
+            return done.join(',') || 'no_change';
+        """, campaign_keyword)
+
+        logger.info(f"[EdiAI] 캠페인 '{campaign_keyword}' 설정: {actions}")
+        time.sleep(0.5)
+        # 드롭다운 닫기
+        driver.find_element(By.TAG_NAME, "body").click()
+        time.sleep(0.5)
+    except Exception as e:
+        logger.warning(f"[EdiAI] 캠페인 선택 오류: {e}")
 
 
 def _click_search(driver):
