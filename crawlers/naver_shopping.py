@@ -62,13 +62,25 @@ def _inject_cookies(driver, cookie_json: str):
     """NAVER_COOKIE 환경변수(JSON 배열)를 드라이버에 주입."""
     try:
         cookies = json.loads(cookie_json)
+        # .naver.com 쿠키는 naver.com에서 주입
         driver.get("https://naver.com")
         time.sleep(1)
         for cookie in cookies:
-            try:
-                driver.add_cookie(cookie)
-            except Exception as e:
-                logger.debug(f"쿠키 주입 실패: {e}")
+            if ".naver.com" in cookie.get("domain", "") or cookie.get("domain", "").endswith("naver.com"):
+                try:
+                    driver.add_cookie(cookie)
+                except Exception as e:
+                    logger.debug(f"쿠키 주입 실패 ({cookie.get('name')}): {e}")
+        # center.shopping.naver.com 전용 쿠키 주입
+        driver.get("https://center.shopping.naver.com")
+        time.sleep(2)
+        for cookie in cookies:
+            domain = cookie.get("domain", "")
+            if "center.shopping" in domain or "shopping.naver" in domain:
+                try:
+                    driver.add_cookie(cookie)
+                except Exception as e:
+                    logger.debug(f"쿠키 주입 실패 ({cookie.get('name')}): {e}")
         logger.info(f"[NaverShopping] 쿠키 {len(cookies)}개 주입 완료")
     except Exception as e:
         logger.warning(f"[NaverShopping] 쿠키 주입 오류: {e}")
@@ -273,6 +285,13 @@ def scrape(target_date: str | None = None) -> dict:
         for label, url in [("PC", PC_REPORT_URL), ("MO", MO_REPORT_URL)]:
             logger.info(f"[NaverShopping/{label}] 리포트 페이지 이동: {url}")
             driver.get(url)
+            time.sleep(3)
+            current = driver.current_url
+            logger.info(f"[NaverShopping/{label}] 현재 URL: {current}")
+            if "login" in current or "nidlogin" in current:
+                logger.error(f"[NaverShopping/{label}] 세션 만료 — 로그인 페이지로 리다이렉트됨")
+                results[label.lower()] = None
+                continue
             _set_date_yesterday(driver, target_date)
             data = _extract_summary(driver, label)
             results[label.lower()] = data

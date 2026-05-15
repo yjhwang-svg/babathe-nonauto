@@ -2,9 +2,12 @@
 버즈빌UA 크롤러
 - 두 개의 adgroup_id(설정 시트에서 읽기)를 각각 조회 후 clicks + budget 합산
 - 반환: {"imps": 0, "clicks": N, "cost": N}
+- BUZZVIL_COOKIE 환경변수(JSON 배열)로 세션 쿠키 주입 가능 (로그인 불필요)
 """
 
+import json
 import logging
+import os
 import re
 import time
 from datetime import datetime
@@ -18,7 +21,6 @@ REPORT_URL_TEMPLATE = "https://dashboard.buzzvil.com/campaign/direct_sales/adgro
 
 
 def _require_env(name: str) -> str:
-    import os
     val = os.environ.get(name, "").strip()
     if not val:
         raise EnvironmentError(f"환경변수 {name}이 설정되지 않았습니다.")
@@ -38,6 +40,22 @@ def build_driver():
     return webdriver.Chrome(options=options)
 
 
+def _inject_cookies(driver, cookie_json: str):
+    """BUZZVIL_COOKIE 환경변수(JSON 배열)를 드라이버에 주입."""
+    try:
+        cookies = json.loads(cookie_json)
+        driver.get("https://dashboard.buzzvil.com")
+        time.sleep(1)
+        for cookie in cookies:
+            try:
+                driver.add_cookie(cookie)
+            except Exception as e:
+                logger.debug(f"쿠키 주입 실패 ({cookie.get('name')}): {e}")
+        logger.info(f"[Buzzvil] 쿠키 {len(cookies)}개 주입 완료")
+    except Exception as e:
+        logger.warning(f"[Buzzvil] 쿠키 주입 오류: {e}")
+
+
 def login(driver):
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support import expected_conditions as EC
@@ -47,27 +65,34 @@ def login(driver):
     driver.get(LOGIN_URL)
     wait = WebDriverWait(driver, 20)
 
+    # 실제 확인된 선택자: id="signin__username-input", id="signin__pw-input", id="signin__signin-btn"
     email_input = wait.until(
         EC.presence_of_element_located(
-            (By.CSS_SELECTOR, 'input[type="email"], input[name="email"], input[name="username"]')
+            (By.CSS_SELECTOR, '#signin__username-input, input[type="email"]')
         )
     )
     email_input.clear()
     email_input.send_keys(_require_env("BUZZVIL_EMAIL"))
 
-    pw = driver.find_element(By.CSS_SELECTOR, 'input[type="password"]')
+    pw = driver.find_element(By.CSS_SELECTOR, '#signin__pw-input, input[type="password"]')
     pw.clear()
     pw.send_keys(_require_env("BUZZVIL_PASSWORD"))
 
-    driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
+    # Sign in 버튼 클릭
+    try:
+        btn = driver.find_element(By.ID, "signin__signin-btn")
+        driver.execute_script("arguments[0].click();", btn)
+    except Exception:
+        from selenium.webdriver.common.keys import Keys
+        pw.send_keys(Keys.RETURN)
 
     # 로그인 처리까지 넉넉하게 대기
-    time.sleep(6)
+    time.sleep(8)
     try:
         wait.until(EC.url_changes(LOGIN_URL))
     except Exception:
         pass
-    time.sleep(2)
+    time.sleep(3)
 
     try:
         driver.save_screenshot("/tmp/buzzvil_login.png")
@@ -77,8 +102,20 @@ def login(driver):
     current_url = driver.current_url
     logger.info(f"[Buzzvil] 로그인 후 URL: {current_url}")
 
-    # 에러 메시지 로그
-    if "login" in current_url.lower():
+    # 로그인 성공 여부: URL 변경 OR 대시보드 특징 요소 존재
+    logged_in = "login" not in current_url.lower()
+    if not logged_in:
+        # SPA일 경우 URL이 안 바뀔 수 있어 DOM으로 교차 확인
+        try:
+            wait.until(EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "nav, .sidebar, [class*='dashboard'], [class*='nav'], [class*='header']")
+            ))
+            logged_in = True
+            logger.info("[Buzzvil] DOM으로 로그인 성공 확인")
+        except Exception:
+            pass
+
+    if not logged_in:
         try:
             err_el = driver.find_element(
                 By.CSS_SELECTOR, ".error-message, .alert, [class*='error'], [class*='Error']"
@@ -192,11 +229,17 @@ def scrape(adgroup_ids: list[str], target_date: str | None = None) -> dict | Non
     """
     여러 adgroup_id를 조회하여 clicks + cost 합산 반환.
     imps는 0으로 고정 (버즈빌 UA 특성상 노출 미집계).
+    BUZZVIL_COOKIE 환경변수가 있으면 쿠키 주입, 없으면 ID/PW 로그인.
     """
     target_date = target_date or get_target_date()
+    cookie_json = os.environ.get("BUZZVIL_COOKIE", "").strip()
     driver = build_driver()
     try:
-        login(driver)
+        if cookie_json:
+            logger.info("[Buzzvil] 쿠키 기반 로그인 시도")
+            _inject_cookies(driver, cookie_json)
+        else:
+            login(driver)
         total = {"imps": 0, "clicks": 0, "cost": 0}
         any_success = False
         for adgroup_id in adgroup_ids:
