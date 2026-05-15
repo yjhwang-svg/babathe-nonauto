@@ -102,14 +102,17 @@ def login(driver):
 
 
 def _set_yesterday(driver):
-    """상단 '어제' 버튼 클릭 — JS로 태그 우선순위 탐색."""
+    """상단 '어제' 버튼 클릭 — 가시성 확인 후 클릭."""
     clicked = driver.execute_script("""
         var tags = ['button', 'a', 'span', 'li', 'div'];
         for (var ti = 0; ti < tags.length; ti++) {
             var els = document.querySelectorAll(tags[ti]);
             for (var i = 0; i < els.length; i++) {
                 var t = (els[i].innerText || '').trim();
-                if (t === '어제') { els[i].click(); return true; }
+                var r = els[i].getBoundingClientRect();
+                if (t === '어제' && r.width > 0 && r.height > 0) {
+                    els[i].click(); return true;
+                }
             }
         }
         return false;
@@ -122,23 +125,24 @@ def _set_yesterday(driver):
 
 
 def _select_advertiser(driver):
-    """광고주 드롭다운에서 바바더닷컴 선택 — JS로 처리."""
+    """광고주 드롭다운에서 바바더닷컴 선택 — 가시성 확인 후 클릭."""
     time.sleep(1)
-    # 드롭다운 트리거 클릭 — 가장 작은 노드(leaf-first) 탐색
+    # 드롭다운 트리거 클릭 (화면에 보이는 요소만)
     driver.execute_script("""
         var tags = ['button', 'span', 'div', 'li', 'a'];
         for (var ti = 0; ti < tags.length; ti++) {
             var els = document.querySelectorAll(tags[ti]);
             for (var i = 0; i < els.length; i++) {
                 var t = (els[i].innerText || '').trim();
-                if (t === '광고주 선택' || t === '바바더닷컴') {
-                    els[i].click(); return;
+                var r = els[i].getBoundingClientRect();
+                if ((t === '광고주 선택' || t === '바바더닷컴') && r.width > 0 && r.height > 0) {
+                    els[i].click(); return t;
                 }
             }
         }
     """)
     time.sleep(1)
-    # 옵션 선택 — leaf-first 탐색
+    # 옵션 클릭 — 드롭다운 열린 후 화면에 보이는 옵션만
     clicked = driver.execute_script("""
         var name = arguments[0];
         var tags = ['option', 'li', 'span', 'div'];
@@ -146,7 +150,8 @@ def _select_advertiser(driver):
             var els = document.querySelectorAll(tags[ti]);
             for (var i = 0; i < els.length; i++) {
                 var t = (els[i].innerText || '').trim();
-                if (t.indexOf(name) >= 0 && t.length < 30) {
+                var r = els[i].getBoundingClientRect();
+                if (t.indexOf(name) >= 0 && t.length < 30 && r.width > 0 && r.height > 0) {
                     els[i].click(); return t;
                 }
             }
@@ -161,23 +166,24 @@ def _select_advertiser(driver):
 
 
 def _select_campaign(driver, campaign_keyword: str):
-    """캠페인 드롭다운에서 keyword 포함하는 캠페인 선택 — JS로 처리."""
+    """캠페인 드롭다운에서 keyword 포함하는 캠페인 선택 — 가시성 확인 후 클릭."""
     time.sleep(1)
-    # 드롭다운 트리거 클릭 — leaf-first 탐색
+    # 드롭다운 트리거 클릭 (화면에 보이는 요소만)
     driver.execute_script("""
         var tags = ['button', 'span', 'div', 'li', 'a'];
         for (var ti = 0; ti < tags.length; ti++) {
             var els = document.querySelectorAll(tags[ti]);
             for (var i = 0; i < els.length; i++) {
                 var t = (els[i].innerText || '').trim();
-                if (t === '캠페인 선택' || t === 'AI상품매칭' || t === '트렌드박스') {
-                    els[i].click(); return;
+                var r = els[i].getBoundingClientRect();
+                if ((t === '캠페인 선택' || t === 'AI상품매칭' || t === '트렌드박스') && r.width > 0 && r.height > 0) {
+                    els[i].click(); return t;
                 }
             }
         }
     """)
-    time.sleep(1)
-    # 키워드 포함 옵션 클릭 — leaf-first 탐색
+    time.sleep(1.5)  # 드롭다운 애니메이션 대기
+    # 옵션 클릭 — 드롭다운 열린 후 화면에 보이는 옵션만
     clicked = driver.execute_script("""
         var kw = arguments[0];
         var tags = ['option', 'li', 'span', 'div'];
@@ -185,7 +191,8 @@ def _select_campaign(driver, campaign_keyword: str):
             var els = document.querySelectorAll(tags[ti]);
             for (var i = 0; i < els.length; i++) {
                 var t = (els[i].innerText || '').trim();
-                if (t.indexOf(kw) >= 0 && t.length < 30) {
+                var r = els[i].getBoundingClientRect();
+                if (t.indexOf(kw) >= 0 && t.length < 30 && r.width > 0 && r.height > 0) {
                     els[i].click(); return t;
                 }
             }
@@ -200,14 +207,17 @@ def _select_campaign(driver, campaign_keyword: str):
 
 
 def _click_search(driver):
-    """'조회' 버튼 클릭 — JS로 태그 우선순위 탐색."""
+    """'조회' 버튼 클릭 — 가시성 확인 후 클릭."""
     clicked = driver.execute_script("""
         var tags = ['button', 'a', 'span', 'div'];
         for (var ti = 0; ti < tags.length; ti++) {
             var els = document.querySelectorAll(tags[ti]);
             for (var i = 0; i < els.length; i++) {
                 var t = (els[i].innerText || '').trim();
-                if (t === '조회') { els[i].click(); return true; }
+                var r = els[i].getBoundingClientRect();
+                if (t === '조회' && r.width > 0 && r.height > 0) {
+                    els[i].click(); return true;
+                }
             }
         }
         return false;
