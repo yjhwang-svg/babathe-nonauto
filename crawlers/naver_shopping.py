@@ -185,8 +185,8 @@ def _set_date_yesterday(driver, target_date: str):
     # 조회 버튼 클릭
     try:
         search_btn = driver.find_element(
-            By.CSS_SELECTOR,
-            'button[type="submit"], .btn_search, .search_btn, button.btn-primary'
+            By.XPATH,
+            "//button[normalize-space()='조회']"
         )
         search_btn.click()
         logger.info("[NaverShopping] 조회 버튼 클릭")
@@ -207,58 +207,49 @@ def _find_col_idx(headers: list[str], keywords: list[str]) -> int | None:
 
 
 def _extract_summary(driver, label: str) -> dict | None:
-    """결과 테이블의 합계 행에서 노출수/클릭수/적용수수료 추출."""
-    from selenium.webdriver.common.by import By
-
+    """
+    JS로 '합계' 행을 찾아 노출수/클릭수/적용수수료 추출.
+    div 기반 레이아웃 대응 (table 없음).
+    합계 행 구조: [합계텍스트, 노출수, 클릭수, 클릭율, 적용수수료, ...]
+    """
     try:
         driver.save_screenshot(f"/tmp/naver_{label}_report.png")
     except Exception:
         pass
 
-    # 헤더 행 파악
-    header_cells = driver.find_elements(By.CSS_SELECTOR, "table thead th, table thead td")
-    if not header_cells:
-        header_cells = driver.find_elements(By.CSS_SELECTOR, "table tr:first-child th, table tr:first-child td")
+    cells = driver.execute_script("""
+        var all = document.querySelectorAll('*');
+        for (var i = 0; i < all.length; i++) {
+            var t = (all[i].innerText || '').trim();
+            if (t.indexOf('합계') === 0 && all[i].children.length === 0) {
+                var row = all[i].parentElement;
+                while (row && row.children.length < 4) {
+                    row = row.parentElement;
+                }
+                if (!row) return null;
+                var result = [];
+                for (var j = 0; j < row.children.length; j++) {
+                    result.push((row.children[j].innerText || '').trim());
+                }
+                return result;
+            }
+        }
+        return null;
+    """)
 
-    headers = [c.text.strip() for c in header_cells]
-    logger.info(f"[NaverShopping/{label}] 헤더: {headers}")
-
-    imps_idx  = _find_col_idx(headers, ["노출수", "노출"])
-    click_idx = _find_col_idx(headers, ["클릭수", "클릭"])
-    cost_idx  = _find_col_idx(headers, ["적용수수료", "수수료", "비용"])
-
-    logger.info(f"[NaverShopping/{label}] 컬럼 인덱스 — 노출:{imps_idx}, 클릭:{click_idx}, 수수료:{cost_idx}")
-
-    if click_idx is None or cost_idx is None:
-        logger.error(f"[NaverShopping/{label}] 필수 컬럼을 찾지 못했습니다.")
+    if not cells:
+        logger.error(f"[NaverShopping/{label}] 합계 행을 찾을 수 없음")
         return None
 
-    # 합계 행 탐색
-    body_rows = driver.find_elements(By.CSS_SELECTOR, "table tbody tr, table tfoot tr")
-    for row in reversed(body_rows):  # 합계는 보통 하단에 위치
-        cells = row.find_elements(By.CSS_SELECTOR, "td, th")
-        row_text = " ".join(c.text for c in cells)
-        if "합계" in row_text or "total" in row_text.lower() or "sum" in row_text.lower():
-            imps   = _clean_number(cells[imps_idx].text)  if imps_idx  is not None and imps_idx  < len(cells) else 0
-            clicks = _clean_number(cells[click_idx].text) if click_idx < len(cells) else 0
-            cost   = _clean_number(cells[cost_idx].text)  if cost_idx  < len(cells) else 0
-            logger.info(f"[NaverShopping/{label}] 합계 → imps={imps}, clicks={clicks}, cost={cost}")
-            return {"imps": imps, "clicks": clicks, "cost": cost}
+    logger.info(f"[NaverShopping/{label}] 합계 행 셀 수: {len(cells)}")
 
-    # 합계 행이 없으면 전체 합산
-    logger.info(f"[NaverShopping/{label}] 합계 행 없음 — 전체 합산")
-    total_imps, total_clicks, total_cost = 0, 0, 0
-    for row in body_rows:
-        cells = row.find_elements(By.CSS_SELECTOR, "td")
-        if not cells:
-            continue
-        if imps_idx is not None and imps_idx < len(cells):
-            total_imps += _clean_number(cells[imps_idx].text)
-        if click_idx < len(cells):
-            total_clicks += _clean_number(cells[click_idx].text)
-        if cost_idx < len(cells):
-            total_cost += _clean_number(cells[cost_idx].text)
-    return {"imps": total_imps, "clicks": total_clicks, "cost": total_cost}
+    # 구조: [합계텍스트, 노출수, 클릭수, 클릭율, 적용수수료, ...]
+    imps   = _clean_number(cells[1]) if len(cells) > 1 else 0
+    clicks = _clean_number(cells[2]) if len(cells) > 2 else 0
+    cost   = _clean_number(cells[4]) if len(cells) > 4 else 0
+
+    logger.info(f"[NaverShopping/{label}] imps={imps}, clicks={clicks}, cost={cost}")
+    return {"imps": imps, "clicks": clicks, "cost": cost}
 
 
 def scrape(target_date: str | None = None) -> dict:
