@@ -159,39 +159,40 @@ def _set_date_yesterday(driver, target_date: str):
     except Exception:
         pass
 
-    # 날짜 범위 버튼 중 "어제" 버튼 시도
-    try:
-        yesterday_btn = driver.find_element(
-            By.XPATH,
-            "//*[contains(text(),'어제') or contains(@data-period,'yesterday') or contains(@class,'yesterday')]"
-        )
-        yesterday_btn.click()
+    # 날짜 범위 버튼 중 "어제" 버튼 시도 — JS로 태그 우선순위 탐색
+    clicked = driver.execute_script("""
+        var tags = ['button', 'a', 'span', 'li', 'div'];
+        for (var ti = 0; ti < tags.length; ti++) {
+            var els = document.querySelectorAll(tags[ti]);
+            for (var i = 0; i < els.length; i++) {
+                var t = (els[i].innerText || '').trim();
+                if (t === '어제') { els[i].click(); return true; }
+            }
+        }
+        return false;
+    """)
+    if clicked:
         logger.info("[NaverShopping] '어제' 버튼 클릭")
         time.sleep(2)
-    except Exception:
-        # 직접 날짜 input에 입력
-        logger.info("[NaverShopping] '어제' 버튼 없음 — 날짜 직접 입력 시도")
-        date_inputs = driver.find_elements(
-            By.CSS_SELECTOR,
-            'input[type="date"], input[type="text"][placeholder*="날짜"], '
-            'input[class*="date"], input[id*="date"]'
-        )
-        if len(date_inputs) >= 2:
-            for inp in date_inputs[:2]:
-                driver.execute_script("arguments[0].value = arguments[1]", inp, target_date)
-        elif date_inputs:
-            driver.execute_script("arguments[0].value = arguments[1]", date_inputs[0], target_date)
+    else:
+        logger.warning("[NaverShopping] '어제' 버튼 없음 — 기본 날짜 유지")
 
-    # 조회 버튼 클릭
-    try:
-        search_btn = driver.find_element(
-            By.XPATH,
-            "//button[normalize-space()='조회']"
-        )
-        search_btn.click()
+    # 조회 버튼 클릭 — JS로 태그 우선순위 탐색
+    clicked = driver.execute_script("""
+        var tags = ['button', 'a', 'span', 'div'];
+        for (var ti = 0; ti < tags.length; ti++) {
+            var els = document.querySelectorAll(tags[ti]);
+            for (var i = 0; i < els.length; i++) {
+                var t = (els[i].innerText || '').trim();
+                if (t === '조회') { els[i].click(); return true; }
+            }
+        }
+        return false;
+    """)
+    if clicked:
         logger.info("[NaverShopping] 조회 버튼 클릭")
-    except Exception as e:
-        logger.warning(f"[NaverShopping] 조회 버튼 클릭 실패: {e}")
+    else:
+        logger.warning("[NaverShopping] 조회 버튼 없음")
 
     time.sleep(4)
 

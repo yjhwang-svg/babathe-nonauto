@@ -245,6 +245,7 @@ def scrape(adgroup_ids: list[str], target_date: str | None = None) -> dict | Non
                 logger.warning(f"[Buzzvil] adgroup {adgroup_id} 데이터 없음 — 합산에서 제외")
         if not any_success:
             return None
+        total["imps"] = 0  # 버즈빌 UA는 노출 미집계
         logger.info(f"[Buzzvil] 합산 결과: {total}")
         return total
     finally:
