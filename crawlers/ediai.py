@@ -169,7 +169,7 @@ def _select_campaign(driver, campaign_keyword: str):
         wrap.click()
         time.sleep(1)
 
-        # JS: label[for^="ckb_"] 순회 — 텍스트 매칭으로 target/non-target 구분 후 토글
+        # JS: 화면에 보이는 label[for^="ckb_"]만 순회 — 조상 탐색으로 p 텍스트 매칭
         actions = driver.execute_script("""
             var kw = arguments[0];
             var done = [];
@@ -177,13 +177,21 @@ def _select_campaign(driver, campaign_keyword: str):
             for (var i = 0; i < labels.length; i++) {
                 var forId = labels[i].getAttribute('for');
                 if (forId === 'ckb_all') continue;
+                // 보이지 않는 라벨(다른 곳의 체크박스) 제외
+                var lr = labels[i].getBoundingClientRect();
+                if (lr.width === 0 && lr.height === 0) continue;
                 var chk = document.getElementById(forId);
                 if (!chk) continue;
-                var row = labels[i].parentElement;
-                var p = row ? row.querySelector('p') : null;
+                // label의 부모를 거슬러 올라가며 p 요소 탐색
+                var p = null;
+                var node = labels[i].parentElement;
+                for (var depth = 0; depth < 5 && node && !p; depth++) {
+                    p = node.querySelector('p');
+                    node = node.parentElement;
+                }
                 var text = p ? (p.innerText || '') : '';
                 var isTarget = text.indexOf(kw) >= 0;
-                // XOR: click only if state needs to change
+                // XOR: 상태 불일치할 때만 클릭
                 if (isTarget !== chk.checked) {
                     labels[i].click();
                     done.push(forId + ':' + (isTarget ? 'on' : 'off'));
